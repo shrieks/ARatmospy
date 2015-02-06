@@ -61,7 +61,7 @@ def make_ar_atmos(exptime, rate, alpha_mag, n, m):
     #                         else rootdir = '/Volumes/ShrieksProExtra/ARMovies/'
 
     #rootdir = '/Users/srikar/Dropbox/School/research/ucsc/Data/ARMovies/'
-    #rootdir = '/Users/srikar/Data/ARMovies/'
+    rootdir = '/Users/srikar/Data/ARMovies/py/'
 
     # generate the current date and time (local time zone), pad with zeroes where necessary
     #now=strtrim(bin_date(),2)
@@ -112,11 +112,11 @@ def make_ar_atmos(exptime, rate, alpha_mag, n, m):
                          #(0.91	,10.1	,293,1600		),
                          #(0.40	,7.2	,270,3400		),
                          #(0.50	,16.5	,269,6000		),
-                         (0.85	,23.2	,259,7600		),
+                         (0.85	,23.2	, 59,7600		),
                          #(1.09	,32.7	,259,13300		),
                          (1.08	,5.7	,320,16000		)])
 
-    print, cp_params
+    print cp_params
     n_layers = cp_params.shape[0]
 
     #dims      = size(cp_params)
@@ -139,207 +139,198 @@ def make_ar_atmos(exptime, rate, alpha_mag, n, m):
     ## Not sure if this is the most efficient way to do it, but treating
     ## one layer atmospheres and multi-layer ones separately simplifies
     ## array definition
-    phase = np.array(bign,bign,n_layers,timesteps) 
-   phFT  = make_array(bign, bign, n_layers, timesteps, /comp) ## array for FT of phase
-   phrms = fltarr(timesteps, n_layers)                    ## phase rms at each timestep
-   phvar = fltarr(timesteps, n_layers)                    ## phase variance at each timestep
+    phase = np.zeros((bign,bign,n_layers,timesteps),dtype=float)
+    #phFT  = np.array((bign,bign,n_layers,timesteps),dtype=complex) ## array for FT of phase
+    #phrms = np.zeros((timesteps, n_layers),dtype=float)            ## phase rms at each timestep
+    #phvar = np.zeros((timesteps, n_layers),dtype=float)            ## phase variance at each timestep
 
-   for i = 0, n_layers-1 do begin
-      powerlaw = 2*!pi/screensize_meters*sqrt(0.00058)*(r0s[i]^(-5.0/6.0))*$
-                        (fx^2 + fy^2)^(-11.0/12.0)*bign*sqrt(sqrt(2.))
-      powerlaw[0,0] = 0.0
-      ## make array for the alpha parameter and populate it
-      alpha_phase = - 2 * !pi * (fx*vels_x[i] + fy*vels_y[i]) / rate
+    for i in np.arange(n_layers):
+        
+        powerlaw = (2*np.pi/screensize_meters*np.sqrt(0.00058)*(r0s[i]**(-5.0/6.0))*
+                            (fx**2 + fy**2)**(-11.0/12.0)*bign*sqrt(sqrt(2.)))
+        powerlaw[0,0] = 0.0
+        ## make array for the alpha parameter and populate it
+        alpha_phase = - 2 * np.pi * (fx*vels_x[i] + fy*vels_y[i]) / rate
 
-      if n_elements(alpha_mag) ne n_layers then $
-         alpha = alpha_mag[0] * complex(cos(alpha_phase), sin(alpha_phase)) $
-      else alpha = alpha_mag[i] * complex(cos(alpha_phase), sin(alpha_phase))
+        #if n_elements(alpha_mag) ne n_layers then $
+        # alpha = alpha_mag[0] * complex(cos(alpha_phase), sin(alpha_phase)) $
+        #else alpha = alpha_mag[i] * complex(cos(alpha_phase), sin(alpha_phase))
+        alpha = alpha_mag * (np.cos(alpha_phase) + 1j * np.sin(alpha_phase))
 
-      noisescalefac = sqrt(1 - (abs(alpha))^2)
-      print, 'Layer ', trim(i+1), ' alpha created'
-      if keyword_set(stopflag) then stop
+        noisescalefac = np.sqrt(1 - (np.abs(alpha))**2)
+        print, 'Layer ', str(i+1), ' alpha created'
       
-      for t= 0.0, timesteps-1 do begin
-         # generate noise to be added in, FT it and scale by powerlaw
-         if keyword_set(coyflag) then $
-            noise = rng -> GetRandomNumbers(bign, bign, /NORMAL) $
-         else noise = randomn(marseed, bign,bign)
+        for t in np.arange(timesteps):
+             # generate noise to be added in, FT it and scale by powerlaw
+             noise = np.random.randn(bign,bign)
 
-         ## no added noise yet, start with a regular phase screen
-         noiseFT = fft(noise) * powerlaw
+             ## no added noise yet, start with a regular phase screen
+             noiseFT = sf.fft2(noise) * powerlaw
 
-         if t eq 0 then begin
-            wfFT = noiseFT
-            phFT[*,*,i,t] = noiseFT
-         endif else begin      
-            # autoregression AR(1)
-            # the new wavefront = alpha * wfnow + noise
-            wfFT = alpha * phFT[*,*,i,t-1] + noiseFT * noisescalefac
+             if t == 0:
+                 wfFT = noiseFT
+                 #phFT[*,*,i,t] = noiseFT
+             else:      
+             # autoregression AR(1)
+             # the new wavefront = alpha * wfnow + noise
+                 wfFT = alpha * phFT[*,*,i,t-1] + noiseFT * noisescalefac
 
-            phFT[*,*,i,t] = wfFT
-            #if keyword_set(stopflag) then stop
-         endelse
-
-         # the new phase is the real_part of the inverse FT of the above
-         wf = real_part(fft(wfFT, /inverse))
-         phrms[t,i] = rms(wf)
-         phvar[t,i] = variance(wf)
+             #phFT[*,*,i,t] = wfFT
+            
+             # the new phase is the real_part of the inverse FT of the above
+             wf = ifft2(wfFT).real
+             #phrms[t,i] = rms(wf)
+             #phvar[t,i] = variance(wf)
  
-         if keyword_set(depistiltflag) then $
-            phase[*,*,i,t] = depiston(detilt(wf,aperture),aperture)*aperture $
-         else phase[*,*,i,t] = wf
-      endfor
+             #if depistiltflag:
+                 #phase[*,*,i,t] = depiston(detilt(wf,aperture),aperture)*aperture $
+             #else:
+             phase[*,*,i,t] = wf
 
-#      if keyword_set(savefileflag) then begin
-#         writefits, layerfileroot+trim(i+1)+'.fits', reform(phase[*,*,i,*])
-#         print, 'layer ', trim(i+1), ' movie file saved'
-#      endif
-   endfor
 
-   plot, phvar[*,0], lines=0#, /ylog, yrange=[0.1,3000]
-   #oplot, phrms[*,0], lines=n_layers
-   for i = 1, n_layers-1 do begin
-      oplot, phvar[*,i], lines=i
+    
+    #plot, phvar[*,0], lines=0#, /ylog, yrange=[0.1,3000]
+    #oplot, phrms[*,0], lines=n_layers
+    #for i = 1, n_layers-1 do begin
+      #oplot, phvar[*,i], lines=i
 #      oplot, phrms[*,n], lines=n+n_layers
-   endfor
-endelse
 
 
-if keyword_set(savefileflag) then begin
-   if keyword_set(hdf5flag) then begin   
-######*******************************************************
-######        set up header for the HDF5 files
-######*******************************************************
-
-
-      hdf5hdr = {TELINST  : 'GPI', $
-                 PRI_DIA  : bigD, $ # 'Telescope primary diameter'
-                 SEC_DIA  : bigDs,$ # 'Telescope secondary diameter'
-                 COM0     : 'AR Atmosphere parameters follow', $
-                 EXPTIME  : exptime, $    # 'Exposure time'
-                 RATE     : rate, $       # 'System rate in Hz'
-                 ALPHAMAG : alpha_mag,$   # 'Magnitude of alpha vector'
-                 N_TSTEPS : timesteps,$   # 'Number of timesteps in cube'
-                 N_SUBAPS : n, $          # 'Width of screen in number of subaps'
-                 PIXSCALE : pscale, $     # 'Pixel scale in meters/pixel'
-                 N_ACROSS : nacross, $    # 'Number of subaps across aperture'
-                 SA_NPIX  :  m, $         # 'Number of pixels per subap'
-                 SA_DIA   :  d, $         # 'Subaperture diameter'
-                 COM1     : 'wind layer parameters follow', $
-                 N_LAYERS : n_layers } #, $  # 'Number of wind layers'
-                 #ARPHASE  : phase }
-
-      if n_layers gt 1 then begin
-         for i = 0, n_layers-1 do begin
-            struct_add_field, hdf5hdr, 'LAYER'+trim(i), 'Layer number'
-            struct_add_field, hdf5hdr, 'R0'+trim(i),  r0s[i] #'r0 for layer '+trim(i)
-            struct_add_field, hdf5hdr, 'VEL'+trim(i), vels[i] #'wind velocity (m/s) for layer i 
-            struct_add_field, hdf5hdr, 'DIR'+trim(i), dirs[i] #'wind direction (radians) for layer i
-         endfor
-         fname  = arfileroot+'-data.h5'
-         faname = arfileroot+'-attr.h5'
-         # ftname = arfileroot+'-phFT.h5'
-         phase  = reform(total(phase,3)) 
-      endif else begin
-         struct_add_field, hdf5hdr, 'LAYER', 0    # 'Layer number'
-         struct_add_field, hdf5hdr, 'R00',  r0s[0] # 'r0 for layer 0'
-         struct_add_field, hdf5hdr, 'VEL0', vels[0] # 'wind velocity (m/s) for layer 0'
-         struct_add_field, hdf5hdr, 'DIR0', dirs[0] # 'wind direction (radians) for layer 0'
-         fname  = onelfileroot+'-data.h5'
-         faname = onelfileroot+'-attr.h5'
-         #ftname = onelfileroot+'-phFT.h5'
-      endelse
-
-      fid = H5F_CREATE(faname)
-      datatype_id  = H5T_IDL_CREATE(hdf5hdr)
-      dataspace_id = H5S_CREATE_SIMPLE(1)
-      dataset_id   = H5D_CREATE(fid,'AR Phase attributes',datatype_id,dataspace_id)
-      H5D_WRITE, dataset_id, hdf5hdr
-      print, 'HDF5 attr file saved: ', faname
-      H5D_CLOSE,dataset_id
-      H5S_CLOSE,dataspace_id
-      H5T_CLOSE,datatype_id
-      H5F_CLOSE,fid   
-
-      fid = H5F_CREATE(fname)
-      datatype_id  = H5T_IDL_CREATE(phase)
-      dataspace_id = H5S_CREATE_SIMPLE(size(phase,/DIMENSIONS))
-      dataset_id   = H5D_CREATE(fid,'AR Phase data',datatype_id,dataspace_id)
-      H5D_WRITE, dataset_id, phase
-      print, 'HDF5 data file saved: ', fname
-      ## close all open identifiers
-      H5D_CLOSE,dataset_id
-      H5S_CLOSE,dataspace_id
-      H5T_CLOSE,datatype_id
-      H5F_CLOSE,fid   
-
-   endif else begin
-######*******************************************************
-######        set up header for the FITS files
-######*******************************************************
-      sxaddpar, arhdr, 'TELINST', 'GPI',      'Telescope and Instrument'
-      sxaddpar, arhdr, 'PRI_DIA',   bigD,     'Telescope primary diameter'
-      sxaddpar, arhdr, 'SEC_DIA',   bigDs,    'Telescope secondary diameter'
-      sxaddpar, arhdr, 'COM0', 'AR Atmosphere parameters follow'
-      sxaddpar, arhdr, 'EXPTIME',  exptime,   'Exposure time'
-      sxaddpar, arhdr, 'RATE',     rate,      'System rate in Hz'
-      sxaddpar, arhdr, 'ALPHAMAG', alpha_mag, 'Magnitude of alpha vector'
-      sxaddpar, arhdr, 'N_TSTEPS', timesteps, 'Number of timesteps in cube'
-      sxaddpar, arhdr, 'N_SUBAPS', n,         'Width of screen in number of subaps'
-      sxaddpar, arhdr, 'PIXSCALE', pscale,    'Pixel scale in meters/pixel'
-      sxaddpar, arhdr, 'N_ACROSS', nacross,   'Number of subaps across aperture'
-      sxaddpar, arhdr, 'SA_NPIX',  m,         'Number of pixels per subap'
-      sxaddpar, arhdr, 'SA_DIA',   d,         'Subaperture diameter'
-      sxaddpar, arhdr, 'COM1', 'wind layer parameters follow'
-      sxaddpar, arhdr, 'N_LAYERS', n_layers,  'Number of wind layers'
-
-      if n_layers gt 1 then begin
-         for i = 0, n_layers-1 do begin
-            sxaddpar, arhdr, 'LAYER'+trim(i), 'Layer number'
-            sxaddpar, arhdr, 'R0'+trim(i),  r0s[i],  'r0 for layer '+trim(i)
-            sxaddpar, arhdr, 'VEL'+trim(i), vels[i], 'wind velocity (m/s) for layer '+trim(i)
-            sxaddpar, arhdr, 'DIR'+trim(i), dirs[i], 'wind direction (radians) for layer '+trim(i)
-         endfor
-         fname  = arfileroot+'.fits'
-         ftname = arfileroot+'-phFT.fits'
-         phase  = reform(total(phase,3)) 
-      endif else begin
-         sxaddpar, arhdr, 'LAYER', 0, 'Layer number'
-         sxaddpar, arhdr, 'R00',  r0s[0],  'r0 for layer 0'
-         sxaddpar, arhdr, 'VEL0', vels[0], 'wind velocity (m/s) for layer 0'
-         sxaddpar, arhdr, 'DIR0', dirs[0], 'wind direction (radians) for layer 0'
-         fname  = onelfileroot+'.fits'
-         ftname = onelfileroot+'-phFT.fits'
-      endelse
-
-      mwrfits, phase, fname, arhdr, /create
-      print, 'FITS movie file saved: ', fname
-      #mwrfits, phFT, ftname, arhdr, /create
-      #print, 'phase FT file saved: ', ftname
-   endelse
-endif
-
-
-   if keyword_set(stopflag) then stop
-
-   if keyword_set(analyzeflag) then begin
-      print, 'Starting analysis...'
-      phapFT = make_array(bign,bign,timesteps,/comp) # FT of apertured phase 
-      phap   = make_array(bign,bign,timesteps,/float) # phase with aperture imposed, depistoned
-      phdt   = make_array(bign,bign,timesteps,/float) # above detilted
-
-      phrms  = make_array(timesteps, /float)
-      sigFT  = make_array(timesteps, /float) 
-      meanFT = make_array(timesteps, /comp)
-      sigap  = make_array(timesteps, /float) # std dev of phap at each timestep
-      r0     = make_array(timesteps, /float) # r0 calculation from sigap
-      sigdt  = make_array(timesteps, /float) # stddev of phdt at each timestep
-
-   endif
-
-  
-   if keyword_set(stopflag) then stop
-end
+#if keyword_set(savefileflag) then begin
+#   if keyword_set(hdf5flag) then begin   
+#######*******************************************************
+#######        set up header for the HDF5 files
+#######*******************************************************
+#
+#
+#      hdf5hdr = {TELINST  : 'GPI', $
+#                 PRI_DIA  : bigD, $ # 'Telescope primary diameter'
+#                 SEC_DIA  : bigDs,$ # 'Telescope secondary diameter'
+#                 COM0     : 'AR Atmosphere parameters follow', $
+#                 EXPTIME  : exptime, $    # 'Exposure time'
+#                 RATE     : rate, $       # 'System rate in Hz'
+#                 ALPHAMAG : alpha_mag,$   # 'Magnitude of alpha vector'
+#                 N_TSTEPS : timesteps,$   # 'Number of timesteps in cube'
+#                 N_SUBAPS : n, $          # 'Width of screen in number of subaps'
+#                 PIXSCALE : pscale, $     # 'Pixel scale in meters/pixel'
+#                 N_ACROSS : nacross, $    # 'Number of subaps across aperture'
+#                 SA_NPIX  :  m, $         # 'Number of pixels per subap'
+#                 SA_DIA   :  d, $         # 'Subaperture diameter'
+#                 COM1     : 'wind layer parameters follow', $
+#                 N_LAYERS : n_layers } #, $  # 'Number of wind layers'
+#                 #ARPHASE  : phase }
+#
+#      if n_layers gt 1 then begin
+#         for i = 0, n_layers-1 do begin
+#            struct_add_field, hdf5hdr, 'LAYER'+trim(i), 'Layer number'
+#            struct_add_field, hdf5hdr, 'R0'+trim(i),  r0s[i] #'r0 for layer '+trim(i)
+#            struct_add_field, hdf5hdr, 'VEL'+trim(i), vels[i] #'wind velocity (m/s) for layer i 
+#            struct_add_field, hdf5hdr, 'DIR'+trim(i), dirs[i] #'wind direction (radians) for layer i
+#         endfor
+#         fname  = arfileroot+'-data.h5'
+#         faname = arfileroot+'-attr.h5'
+#         # ftname = arfileroot+'-phFT.h5'
+#         phase  = reform(total(phase,3)) 
+#      endif else begin
+#         struct_add_field, hdf5hdr, 'LAYER', 0    # 'Layer number'
+#         struct_add_field, hdf5hdr, 'R00',  r0s[0] # 'r0 for layer 0'
+#         struct_add_field, hdf5hdr, 'VEL0', vels[0] # 'wind velocity (m/s) for layer 0'
+#         struct_add_field, hdf5hdr, 'DIR0', dirs[0] # 'wind direction (radians) for layer 0'
+#         fname  = onelfileroot+'-data.h5'
+#         faname = onelfileroot+'-attr.h5'
+#         #ftname = onelfileroot+'-phFT.h5'
+#      endelse
+#
+#      fid = H5F_CREATE(faname)
+#      datatype_id  = H5T_IDL_CREATE(hdf5hdr)
+#      dataspace_id = H5S_CREATE_SIMPLE(1)
+#      dataset_id   = H5D_CREATE(fid,'AR Phase attributes',datatype_id,dataspace_id)
+#      H5D_WRITE, dataset_id, hdf5hdr
+#      print, 'HDF5 attr file saved: ', faname
+#      H5D_CLOSE,dataset_id
+#      H5S_CLOSE,dataspace_id
+#      H5T_CLOSE,datatype_id
+#      H5F_CLOSE,fid   
+#
+#      fid = H5F_CREATE(fname)
+#      datatype_id  = H5T_IDL_CREATE(phase)
+#      dataspace_id = H5S_CREATE_SIMPLE(size(phase,/DIMENSIONS))
+#      dataset_id   = H5D_CREATE(fid,'AR Phase data',datatype_id,dataspace_id)
+#      H5D_WRITE, dataset_id, phase
+#      print, 'HDF5 data file saved: ', fname
+#      ## close all open identifiers
+#      H5D_CLOSE,dataset_id
+#      H5S_CLOSE,dataspace_id
+#      H5T_CLOSE,datatype_id
+#      H5F_CLOSE,fid   
+#
+#   endif else begin
+#######*******************************************************
+#######        set up header for the FITS files
+#######*******************************************************
+#      sxaddpar, arhdr, 'TELINST', 'GPI',      'Telescope and Instrument'
+#      sxaddpar, arhdr, 'PRI_DIA',   bigD,     'Telescope primary diameter'
+#      sxaddpar, arhdr, 'SEC_DIA',   bigDs,    'Telescope secondary diameter'
+#      sxaddpar, arhdr, 'COM0', 'AR Atmosphere parameters follow'
+#      sxaddpar, arhdr, 'EXPTIME',  exptime,   'Exposure time'
+#      sxaddpar, arhdr, 'RATE',     rate,      'System rate in Hz'
+#      sxaddpar, arhdr, 'ALPHAMAG', alpha_mag, 'Magnitude of alpha vector'
+#      sxaddpar, arhdr, 'N_TSTEPS', timesteps, 'Number of timesteps in cube'
+#      sxaddpar, arhdr, 'N_SUBAPS', n,         'Width of screen in number of subaps'
+#      sxaddpar, arhdr, 'PIXSCALE', pscale,    'Pixel scale in meters/pixel'
+#      sxaddpar, arhdr, 'N_ACROSS', nacross,   'Number of subaps across aperture'
+#      sxaddpar, arhdr, 'SA_NPIX',  m,         'Number of pixels per subap'
+#      sxaddpar, arhdr, 'SA_DIA',   d,         'Subaperture diameter'
+#      sxaddpar, arhdr, 'COM1', 'wind layer parameters follow'
+#      sxaddpar, arhdr, 'N_LAYERS', n_layers,  'Number of wind layers'
+#
+#      if n_layers gt 1 then begin
+#         for i = 0, n_layers-1 do begin
+#            sxaddpar, arhdr, 'LAYER'+trim(i), 'Layer number'
+#            sxaddpar, arhdr, 'R0'+trim(i),  r0s[i],  'r0 for layer '+trim(i)
+#            sxaddpar, arhdr, 'VEL'+trim(i), vels[i], 'wind velocity (m/s) for layer '+trim(i)
+#            sxaddpar, arhdr, 'DIR'+trim(i), dirs[i], 'wind direction (radians) for layer '+trim(i)
+#         endfor
+#         fname  = arfileroot+'.fits'
+#         ftname = arfileroot+'-phFT.fits'
+#         phase  = reform(total(phase,3)) 
+#      endif else begin
+#         sxaddpar, arhdr, 'LAYER', 0, 'Layer number'
+#         sxaddpar, arhdr, 'R00',  r0s[0],  'r0 for layer 0'
+#         sxaddpar, arhdr, 'VEL0', vels[0], 'wind velocity (m/s) for layer 0'
+#         sxaddpar, arhdr, 'DIR0', dirs[0], 'wind direction (radians) for layer 0'
+#         fname  = onelfileroot+'.fits'
+#         ftname = onelfileroot+'-phFT.fits'
+#      endelse
+#
+#      mwrfits, phase, fname, arhdr, /create
+#      print, 'FITS movie file saved: ', fname
+#      #mwrfits, phFT, ftname, arhdr, /create
+#      #print, 'phase FT file saved: ', ftname
+#   endelse
+#endif
+#
+#
+#   if keyword_set(stopflag) then stop
+#
+#   if keyword_set(analyzeflag) then begin
+#      print, 'Starting analysis...'
+#      phapFT = make_array(bign,bign,timesteps,/comp) # FT of apertured phase 
+#      phap   = make_array(bign,bign,timesteps,/float) # phase with aperture imposed, depistoned
+#      phdt   = make_array(bign,bign,timesteps,/float) # above detilted
+#
+#      phrms  = make_array(timesteps, /float)
+#      sigFT  = make_array(timesteps, /float) 
+#      meanFT = make_array(timesteps, /comp)
+#      sigap  = make_array(timesteps, /float) # std dev of phap at each timestep
+#      r0     = make_array(timesteps, /float) # r0 calculation from sigap
+#      sigdt  = make_array(timesteps, /float) # stddev of phdt at each timestep
+#
+#   endif
+#
+#  
+#   if keyword_set(stopflag) then stop
+#end
 
 # mov = readfits('movie.fits')
 # mov1= reform(mov[*,*,0,*])

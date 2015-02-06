@@ -86,7 +86,7 @@ def make_ar_atmos(exptime, rate, alpha_mag, n, m):
     bign      = n*m               ## width of phase screen for aperture
 
     ## for phase samples
-    pscale    = bigD/((nacross)*m) ## pixel size (m) of samples in pupil plane
+    pscale    = bigD/(n*m) ## pixel size (m) of samples in pupil plane
     d         = pscale*m          ## subap diameter (m)
 
     ### make the aperture
@@ -96,170 +96,50 @@ def make_ar_atmos(exptime, rate, alpha_mag, n, m):
     #ap_inner  = ar LE bigDs/2     ## 
     #aperture  = ap_outer - ap_inner
 
-timesteps = floor(exptime * rate)   ## number of timesteps 
+    timesteps = floor(exptime * rate)   ## number of timesteps 
 
-# create atmosphere parameter array, r0 in meters, vel in m/s, dir in degrees (0-360), alt in meters
-#                      ( r0,     vel,    dir, alt] x n_layers
-# 7-layers for LSST
-cp_params = np.array([
-                      #(0.40	,6.9	,284,0		),
-                      #(0.78	,7.5	,267,25		),
-                      #(1.07	,7.8	,244,50		),
-                      #(1.12	,8.3	,267,100		),
-                      #(0.84	,9.6	,237,200		),
-                      #(0.68	,9.9	,232,400		),
-                      #(0.66	,9.6	,286,800		),
-                      #(0.91	,10.1	,293,1600		),
-                      #(0.40	,7.2	,270,3400		),
-                      #(0.50	,16.5	,269,6000		),
-                      (0.85	,23.2	,259,7600		),
-                      #(1.09	,32.7	,259,13300		),
-                      (1.08	,5.7	,320,16000		)])
+    # create atmosphere parameter array, r0 in meters, vel in m/s, dir in degrees (0-360), alt in meters
+    #                      ( r0,     vel,    dir, alt] x n_layers
+    # 7-layers for LSST
+    cp_params = np.array([
+                         #(0.40	,6.9	,284,0		),
+                         #(0.78	,7.5	,267,25		),
+                         #(1.07	,7.8	,244,50		),
+                         #(1.12	,8.3	,267,100		),
+                         #(0.84	,9.6	,237,200		),
+                         #(0.68	,9.9	,232,400		),
+                         #(0.66	,9.6	,286,800		),
+                         #(0.91	,10.1	,293,1600		),
+                         #(0.40	,7.2	,270,3400		),
+                         #(0.50	,16.5	,269,6000		),
+                         (0.85	,23.2	,259,7600		),
+                         #(1.09	,32.7	,259,13300		),
+                         (1.08	,5.7	,320,16000		)])
 
-print, cp_params
-n_layers = cp_params.shape[0]
+    print, cp_params
+    n_layers = cp_params.shape[0]
 
-#dims      = size(cp_params)
-## check for number of layers in atmosphere
-#if dims[0] eq 1 then n_layers = 1 else n_layers = dims[2]
+    #dims      = size(cp_params)
+    ## check for number of layers in atmosphere
+    #if dims[0] eq 1 then n_layers = 1 else n_layers = dims[2]
 
-r0s       = cp_params[0,*]    ## r0 in meters
-vels      = cp_params[1,*]    ## m/s,  change to [0,0,0] to get pure boiling
-if keyword_set(boilingonly) then vels = vels * 0.0
-dirs      = cp_params[2,*]*!pi/180. ## in radians
+    r0s       = cp_params[:,0]    ## r0 in meters
+    vels      = cp_params[:,1]    ## m/s,  change to [0,0,0] to get pure boiling
+    #if keyword_set(boilingonly) then vels = vels * 0.0
+    dirs      = cp_params[:,2] * np.pi/180. ## in radians
 
-## decompose velocities into components
-vels_x    = vels*cos(dirs)
-vels_y    = vels*sin(dirs)
+    ## decompose velocities into components
+    vels_x    = vels * np.cos(dirs)
+    vels_y    = vels * np.sin(dirs)
+    
+    screensize_meters = bign * pscale
+    deltaf = 1/screensize_meters   ## spatial frequency delta
+    fx, fy = gg.generate_grids(bign, scalefac=deltaf, freqshift=True)
 
-screensize_meters = bign * pscale
-deltaf = 1/screensize_meters   ## spatial frequency delta
-generate_grids, /freqsh, fx, fy, bign, scale=deltaf, double=doubleflag
-
-## Not sure if this is the most efficient way to do it, but treating
-## one layer atmospheres and multi-layer ones separately simplifies
-## array definition
-if n_layers eq 1 then begin
-   # phasecube from autoregressive algorithm
-   phase = fltarr(bign,bign,timesteps) 
-   phFT  = make_array(bign, bign, timesteps, /comp) ## array for FT of phase
-
-   if keyword_set(compareflag) then begin
-      phrms = fltarr(timesteps)                     ## phase rms at each timestep
-      phvar = fltarr(timesteps)                     ## phase variance at each timestep
-        					    ## power is proportional to this	
-
-      # phasecube from Lisa's GPI sim - pure frozen flow
-      cph  = fltarr(bign, bign, timesteps)
-      cphrms = fltarr(timesteps)
-      cphvar = fltarr(timesteps)
-      # use Don's screengen to generate an uncorrelated screen every timestep
-      sph  = fltarr(bign, bign, timesteps)
-      sphrms = fltarr(timesteps)
-      sphvar = fltarr(timesteps)
-      # generate a phasecube every timestep. Uncorrelated.
-      gph  = fltarr(bign, bign, timesteps)
-      gphrms = fltarr(timesteps)
-      gphvar = fltarr(timesteps)
-   endif
-
-   # scaling law to make random noise conform to Kolmogorov 
-   powerlaw = 2*!pi/screensize_meters*sqrt(0.00058)*(r0s[0]^(-5.0/6.0))*$
-              (fx^2 + fy^2)^(-11.0/12.0)*bign*sqrt(sqrt(2.))
-   # had to double this to get phase var ~ 1 for r0 = bigD
-   #powerlaw = 4*!pi/screensize_meters*sqrt(0.00058)*(r0s[0]^(-5.0/6.0))*$
-   #           (fx^2 + fy^2)^(-11.0/12.0)*bign*sqrt(sqrt(2.))
-
-   powerlaw[0,0] = 0.0
-   ## make array for the alpha parameter and populate it
-   alpha = make_array(bign, bign, /comp)
-
-   ## phase of alpha = -2pi(k*vx + l*vy)*T/Nd where T is sampling
-   ## interval, N is WFS grid, d is subap size in meters = pscale*m   
-   alpha_phase = - 2 * !pi * (fx*vels_x[0] + fy*vels_y[0]) / rate
-   alpha = alpha_mag * complex(cos(alpha_phase), sin(alpha_phase))
-
-   # power law scale factor to control noise injection
-   noisescalefac = sqrt(1 - (abs(alpha))^2)
-
-   print, "One layer, alpha created"
-   if keyword_set(stopflag) then stop
-
-   if keyword_set(compareflag) then begin
-      cp_basephase = create_multilayer_phasecube(n,m,pscale,exptime, cp_params, $
-                                                 random=round(systime(1)))
-      sgf = screengen(bign,bign,r0s[0],pscale)
-   endif
-
-   for t= 0.0, timesteps-1 do begin
-      # generate noise to be added in, FT it and scale by powerlaw
-      if keyword_set(coyflag) then $
-         noise = rng -> GetRandomNumbers(bign, bign, /NORMAL) $
-      else noise = randomn(marseed, bign,bign)
-      
-      noiseFT = fft(noise) * powerlaw
-
-      if t eq 0 then begin
-         wfFT = noiseFT
-         #nwfFT = noiseFT
-         phFT[*,*,t] = noiseFT
-      endif else begin      
-         # autoregression AR(1)
-         # the new wavefront = alpha * wfnow + noise
-         # need to scale the noise added in, but without phase info
-         #nwfFT = alpha * nwfFT
-         wfFT = alpha * phFT[*,*,t-1] + noiseFT * noisescalefac
-
-         phFT[*,*,t] = wfFT
-         #if keyword_set(stopflag) then stop
-      endelse
-
-      # phase of wavefront
-      # the new phase is the real_part of the inverse FT of the above
-      wf = real_part(fft(wfFT, /inverse))
-
-      # reference phases and variances
-#      nwf = real_part(fft(nwfFT, /inverse))
-#      nphvar[t] = variance(nwf)
-
-	if keyword_set(compareflag) then begin
-           phrms[t] = rms(wf)
-           phvar[t] = variance(wf)
-
-           ## Generate other phase screens and get their RMS / variance
-           cph[*,*,t] = get_phase_streamlined(n, m, pscale, r0s[0])
-           cphrms[t] = rms(cph[*,*,t])
-           cphvar[t] = variance(cph[*,*,t])
-
-           sph[*,*,t] = screengen(sgf, rseed)
-           sphrms[t] = rms(sph[*,*,t])
-           sphvar[t] = variance(sph[*,*,t])
-
-           gph[*,*,t] = get_instant_multilayer_phase(bign, pscale, cp_basephase, $
-                                                     cp_params, t/rate)
-           gphrms[t] = rms(gph[*,*,t])
-           gphvar[t] = variance(gph[*,*,t])
-	endif
-
-      if keyword_set(depistiltflag) then $
-         phase[*,*,t] = depiston(detilt(wf,aperture),aperture)*aperture $
-      else phase[*,*,t] = wf
-
-   endfor
-
-   #plot, phvar, l=2
-	if keyword_set(compareflag) then begin
-  	  plot, cphvar, psym=3 #, xrange=[0,timesteps] 	
-	  oplot, gphvar, lines=1
-   	  oplot, phvar, lines=0, thick=2
-      #oplot, nphvar, lines=3
-   	  oplot, sphvar, psym=4
-  	endif
-
-   if keyword_set(stopflag) then stop
-## multiple layers
-endif else begin 
-   phase = fltarr(bign,bign,n_layers,timesteps) 
+    ## Not sure if this is the most efficient way to do it, but treating
+    ## one layer atmospheres and multi-layer ones separately simplifies
+    ## array definition
+    phase = np.array(bign,bign,n_layers,timesteps) 
    phFT  = make_array(bign, bign, n_layers, timesteps, /comp) ## array for FT of phase
    phrms = fltarr(timesteps, n_layers)                    ## phase rms at each timestep
    phvar = fltarr(timesteps, n_layers)                    ## phase variance at each timestep

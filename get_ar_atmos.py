@@ -1,7 +1,8 @@
-def get_ar_atmos(phaseFT, powerlaw, alpha, myran,
-                 nofroflo=boilingonly, onelayer=onelayerflag, 
-                 stop=stopflag, coyote=coyflag, first=firstflag, 
-                 nofftw=nofftwflag, double=dflag)
+import numpy as np
+import numpy.random as ra
+import scipy.fftpack as sf
+
+def get_ar_atmos(phaseFT, powerlaw, alpha, nofroflo=False, first=False):
 
 #;;;;;;;;;;;;;;;;;;;;;
 #;; Srikar Srinath - 2014-05-07
@@ -49,7 +50,7 @@ def get_ar_atmos(phaseFT, powerlaw, alpha, myran,
         noise = ra.normal(size=(screenx, screeny))
         noisescalefac = np.sqrt(1. - np.abs(alpha[i]**2))
         noiseFT = sf.fft2(noise)*powerlaw[i]
-        if firstflag:
+        if first:
             newphFT.append(noiseFT)
         else:
             newphFT.append(alpha[i]*phaseFT[i] + noiseFT*noisescalefac)

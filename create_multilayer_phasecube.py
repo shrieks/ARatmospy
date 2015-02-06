@@ -83,6 +83,7 @@ def create_multilayer_phasecube(n, m, pscale, time, paramcube,
     return phasecube
 
 if __name__ == '__main__':
+    import pyfits
     n = 10
     m = 100
     pscale = 1
@@ -92,3 +93,7 @@ if __name__ == '__main__':
     random = 13409801
     phasecube = create_multilayer_phasecube(n, m, pscale, time, 
                                             paramcube, random=random)
+
+    output = pyfits.HDUList()
+    output.append(pyfits.PrimaryHDU(data=phasecube.transpose()))
+    output.writeto('phasecube.fits', clobber=True)

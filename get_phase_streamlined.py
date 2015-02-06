@@ -3,11 +3,12 @@
 #;; this is our primary phase screen generator code
 
 import numpy as np
+import numpy.random as ra
 import scipy.fftpack as sf
 import generate_grids as gg
 
 def get_phase_streamlined(nsub, m, dx, r0, rseed):
-    ra.seeed(rseed)
+    ra.seed(rseed)
     n = m*nsub
     d = dx*m
     sampfac = 1.0
@@ -15,10 +16,10 @@ def get_phase_streamlined(nsub, m, dx, r0, rseed):
     screensize_meters = n*dx
     delf = 1./screensize_meters
     #generate_grids, /freqsh, newfx, newfy, n, scale=delf, double=doubleflag
-    newfx, newfy = gg.generate_grids(n, scale=delf, freqsh=True)
+    newfx, newfy = gg.generate_grids(n, scalefac=delf, freqshift=True)
 
     powerlaw = 2*np.pi/screensize_meters*np.sqrt(0.00058)*(r0**(-5.0/6.0))* \
-               (newfx**2 + newfy**2)^(-11.0/12.0)*n*np.sqrt(np.sqrt(2.))
+               (newfx**2 + newfy**2)*(-11.0/12.0)*n*np.sqrt(np.sqrt(2.))
 
     powerlaw[0][0] = 0.0
     newfx = 0.0

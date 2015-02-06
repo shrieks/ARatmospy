@@ -54,10 +54,7 @@ def create_multilayer_arbase(n, m, pscale, rate, paramcube, alpha_mag, nofroflo=
             alpha.append(alpha_mag*(np.cos(alpha_phase) + 1j*np.sin(alpha_phase)))
 
     powerlaw = np.array(powerlaw)
-    powerlaw.transpose()
-
     alpha = np.array(alpha)
-    alpha.transpose()
 
     return powerlaw, alpha
 
@@ -74,7 +71,7 @@ if __name__ == '__main__':
     powerlaw, alpha = create_multilayer_arbase(n, m, pscale, rate, paramcube, alpha_mag)
 
     pl_output = pyfits.HDUList()
-    pl_output.append(pyfits.PrimaryHDU(data=powerlaw))
+    pl_output.append(pyfits.PrimaryHDU(data=powerlaw.transpose()))
     pl_output.writeto('powerlaw.fits', clobber=True)
 
     alpha_output = pyfits.HDUList()

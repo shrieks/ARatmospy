@@ -96,7 +96,7 @@ def make_ar_atmos(exptime, rate, alpha_mag, n, m):
     #ap_inner  = ar LE bigDs/2     ## 
     #aperture  = ap_outer - ap_inner
 
-    timesteps = floor(exptime * rate)   ## number of timesteps 
+    timesteps = exptime * rate #np.floor(exptime * rate)   ## number of timesteps 
 
     # create atmosphere parameter array, r0 in meters, vel in m/s, dir in degrees (0-360), alt in meters
     #                      ( r0,     vel,    dir, alt] x n_layers
@@ -133,21 +133,21 @@ def make_ar_atmos(exptime, rate, alpha_mag, n, m):
     vels_y    = vels * np.sin(dirs)
     
     screensize_meters = bign * pscale
-    deltaf = 1/screensize_meters   ## spatial frequency delta
+    deltaf = 1./screensize_meters   ## spatial frequency delta
     fx, fy = gg.generate_grids(bign, scalefac=deltaf, freqshift=True)
 
     ## Not sure if this is the most efficient way to do it, but treating
     ## one layer atmospheres and multi-layer ones separately simplifies
     ## array definition
     phase = np.zeros((bign,bign,n_layers,timesteps),dtype=float)
-    #phFT  = np.array((bign,bign,n_layers,timesteps),dtype=complex) ## array for FT of phase
+    phFT  = np.zeros((bign,bign,n_layers,timesteps),dtype=complex) ## array for FT of phase
     #phrms = np.zeros((timesteps, n_layers),dtype=float)            ## phase rms at each timestep
     #phvar = np.zeros((timesteps, n_layers),dtype=float)            ## phase variance at each timestep
 
     for i in np.arange(n_layers):
         
-        powerlaw = (2*np.pi/screensize_meters*np.sqrt(0.00058)*(r0s[i]**(-5.0/6.0))*
-                            (fx**2 + fy**2)**(-11.0/12.0)*bign*sqrt(sqrt(2.)))
+        powerlaw = (2*np.pi*np.sqrt(0.00058)*(r0s[i]**(-5.0/6.0))*
+                            (fx**2 + fy**2)**(-11.0/12.0)*bign*np.sqrt(np.sqrt(2.))/screensize_meters)
         powerlaw[0,0] = 0.0
         ## make array for the alpha parameter and populate it
         alpha_phase = - 2 * np.pi * (fx*vels_x[i] + fy*vels_y[i]) / rate
@@ -158,7 +158,7 @@ def make_ar_atmos(exptime, rate, alpha_mag, n, m):
         alpha = alpha_mag * (np.cos(alpha_phase) + 1j * np.sin(alpha_phase))
 
         noisescalefac = np.sqrt(1 - (np.abs(alpha))**2)
-        print, 'Layer ', str(i+1), ' alpha created'
+        print 'Layer', str(i+1), 'alpha created'
       
         for t in np.arange(timesteps):
              # generate noise to be added in, FT it and scale by powerlaw
@@ -169,26 +169,34 @@ def make_ar_atmos(exptime, rate, alpha_mag, n, m):
 
              if t == 0:
                  wfFT = noiseFT
-                 #phFT[*,*,i,t] = noiseFT
+                 phFT[:,:,i,t] = noiseFT
              else:      
              # autoregression AR(1)
              # the new wavefront = alpha * wfnow + noise
-                 wfFT = alpha * phFT[*,*,i,t-1] + noiseFT * noisescalefac
-
-             #phFT[*,*,i,t] = wfFT
+                 wfFT = alpha * phFT[:,:,i,t-1] + noiseFT * noisescalefac
+                 phFT[:,:,i,t] = wfFT
             
              # the new phase is the real_part of the inverse FT of the above
-             wf = ifft2(wfFT).real
+             wf = sf.ifft2(wfFT).real
+             wf.shape
              #phrms[t,i] = rms(wf)
              #phvar[t,i] = variance(wf)
  
              #if depistiltflag:
                  #phase[*,*,i,t] = depiston(detilt(wf,aperture),aperture)*aperture $
              #else:
-             phase[*,*,i,t] = wf
+             phase[:,:,i,t] = wf
+        
+        print 'Writing layer', str(i+1), 'file'  
+        phase[:,:,i,:].shape 
+        hdu = pf.PrimaryHDU(phase[:,:,i,:].transpose())
+        hdu.writeto(layerfileroot+str(i+1)+'.fits', clobber=True)
+        print 'Done with Layer', str(i+1)
 
-
-    
+    phaseout = np.sum(phase, axis=2)  # sum along layer axis
+    hdu = pf.PrimaryHDU(phaseout.transpose())
+    hdu.writeto(arfileroot+'.fits', clobber=True)
+    print 'Done'
     #plot, phvar[*,0], lines=0#, /ylog, yrange=[0.1,3000]
     #oplot, phrms[*,0], lines=n_layers
     #for i = 1, n_layers-1 do begin

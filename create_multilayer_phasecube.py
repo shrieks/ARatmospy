@@ -5,6 +5,7 @@
 #;; use this to make phasecube for our simulation!
 
 import numpy as np
+import numpy.random as ra
 from get_phase_streamlined import get_phase_streamlined
 
 def get_x_size(xsize0, max_size, ok_sizes, dir='X'):
@@ -17,17 +18,13 @@ def get_x_size(xsize0, max_size, ok_sizes, dir='X'):
                        % (dir, xsize0))
 
 def create_multilayer_phasecube(n, m, pscale, time, paramcube, 
-                                rflag=None, sizeflag=None):
+                                random=None, sizeflag=None):
     bign = n*m
-    dims = paramcube.shape
-    if dims[0] == 1:
-        n_layers = 1
-    else:
-        n_layers = dims[2]
+    n_layers = len(paramcube)
 
-    r0s = paramcube[0]
-    vels = paramcube[1]
-    directions = paramcube[2]
+    r0s = paramcube[:, 0]
+    vels = paramcube[:, 1]
+    directions = paramcube[:, 2]
 
     # figure out how big each screen needs to be
     vels_x = vels*np.cos(directions*np.pi/180.)
@@ -58,7 +55,7 @@ def create_multilayer_phasecube(n, m, pscale, time, paramcube,
     mysize = max([xsize, ysize])
     required_minimum_size = bign*4.
     if mysize < required_minimum_size:
-        mysize = require_minimum_size
+        mysize = required_minimum_size
 
     if sizeflag is not None:
         mysize = max(mysize, sizeflag)
@@ -68,12 +65,12 @@ def create_multilayer_phasecube(n, m, pscale, time, paramcube,
 
     # now make the phase screens!
 
-    if rflag is None:
-        rflag = 104812094812
+    if random is None:
+        random = 104812094812
 
     phasecube = []
     for j in range(n_layers):
-        phasecube.append(get_phase_streamlined(effectiven, m, pscale, r0s[j], rflag))
+        phasecube.append(get_phase_streamlined(effectiven, m, pscale, r0s[j], random))
     # Match expected array format in original IDL code:
     #phasecube = make_array(mysize, mysize, n_layers, double=dflag)
     #for j=0, n_layers-1 do begin
@@ -81,6 +78,17 @@ def create_multilayer_phasecube(n, m, pscale, time, paramcube,
     #                                             pscale, r0s[j], rflag, double=dflag, nofftw=nofftwflag)
     #endfor
 
-    phasecube = np.array(phasecube).transpose(2, 0, 1)
+    phasecube = np.array(phasecube).transpose()
 
     return phasecube
+
+if __name__ == '__main__':
+    n = 10
+    m = 100
+    pscale = 1
+    time = 1
+    paramcube = np.array([(0.85, 23.2, 259, 7600),
+                          (1.08, 5.7, 320, 16000)])
+    random = 13409801
+    phasecube = create_multilayer_phasecube(n, m, pscale, time, 
+                                            paramcube, random=random)

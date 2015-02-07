@@ -1,21 +1,36 @@
 import numpy as np
+import numpy.random as ra
+import scipy.fftpack as sf
 import pyfits
 from create_multilayer_arbase import create_multilayer_arbase
-from get_ar_atmos import get_ar_atmos
 
 class ArScreens(object):
-    def __init__(self, n, m, pscale, rate, alpha_mag, paramcube):
+    def __init__(self, n, m, pscale, rate, alpha_mag, paramcube,
+                 ranseed=None):
         self.pl, self.alpha = create_multilayer_arbase(n, m, pscale, rate,
                                                        paramcube, alpha_mag)
         self._phaseFT = None
         self.screens = [[] for x in paramcube]
+        ra.seed(ranseed)
+    def get_ar_atmos(self):
+        shape = self.alpha.shape
+        newphFT = []
+        newphase = []
+        for i, powerlaw, alpha in zip(range(shape[0]), self.pl, self.alpha):
+            noise = ra.normal(size=shape[1:3])
+            noisescalefac = np.sqrt(1. - np.abs(alpha**2))
+            noiseFT = sf.fft2(noise)*powerlaw
+            if self._phaseFT is None:
+                newphFT.append(noiseFT)
+            else:
+                newphFT.append(alpha*self._phaseFT[i] + noiseFT*noisescalefac)
+            newphase.append(sf.ifft2(newphFT[i]).real)
+        return np.array(newphFT), np.array(newphase)
     def run(self, nframes, verbose=False):
         for j in range(nframes):
             if verbose:
                 print "time step", j
-            self._phaseFT, screens = get_ar_atmos(self._phaseFT, self.pl,
-                                                  self.alpha,
-                                                  first=(self._phaseFT is None))
+            self._phaseFT, screens = self.get_ar_atmos()
             for i, item in enumerate(screens):
                 self.screens[i].append(item)
     def write(self, outfile, clobber=True):
@@ -33,7 +48,7 @@ if __name__ == '__main__':
     pscale = bigD/(n*m)
     rate = 1000.
     alpha_mag = 0.99
-    paramcube = np.array([(0.85, 23.2, 259, 7600),
+    paramcube = np.array([(0.85, 23.2, 59, 7600),
                           (1.08, 5.7, 320, 16000)])
 
     my_screens = ArScreens(n, m, pscale, rate, alpha_mag, paramcube)

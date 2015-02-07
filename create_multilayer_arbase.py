@@ -6,19 +6,17 @@
 import numpy as np
 import generate_grids as gg
 
-def create_multilayer_arbase(n, m, pscale, rate, paramcube, alpha_mag, nofroflo=False):
-#;  atm_lambda = 500.0            ;; for phase screen generator
-#;  wfs_lambda = 800.0            ;; central frequency of wfs in nm
-
+def create_multilayer_arbase(n, m, pscale, rate, paramcube, alpha_mag,
+                             boiling_only=False):
     bign = n*m
-    d = pscale * m
+    d = pscale*m
 
     n_layers = len(paramcube)
 
-    cp_r0s = paramcube[:, 0]       # r0 in meters
-    cp_vels = paramcube[:, 1]      # m/s,  change to [0,0,0] to get pure boiling
+    cp_r0s = paramcube[:, 0]      # r0 in meters
+    cp_vels = paramcube[:, 1]     # m/s,  change to [0,0,0] to get pure boiling
 
-    if nofroflo:
+    if boiling_only:
         cp_vels *= 0
     cp_dirs   = paramcube[:, 2]*np.pi/180.   # in radians
 
@@ -26,14 +24,10 @@ def create_multilayer_arbase(n, m, pscale, rate, paramcube, alpha_mag, nofroflo=
     cp_vels_x = cp_vels*np.cos(cp_dirs)
     cp_vels_y = cp_vels*np.sin(cp_dirs)
     
-    screensize_meters = bign*pscale  # extent is given by aperture size and sampling
-    deltaf = 1./screensize_meters     # spatial frequency delta
+    screensize_meters = bign*pscale # extent is given by aperture size and sampling
+    deltaf = 1./screensize_meters   # spatial frequency delta
     fx, fy = gg.generate_grids(bign, scalefac=deltaf, freqshift=True)
   
-    powerlaw = np.zeros((bign, bign, n_layers))
-    alpha = np.zeros((bign, bign, n_layers), dtype=np.complex)
-    #mlphaseFT = make_array(bign, bign, n_layers, double=dflag)
-
     powerlaw = []
     alpha = []
     for i in range(n_layers):
@@ -49,9 +43,12 @@ def create_multilayer_arbase(n, m, pscale, rate, paramcube, alpha_mag, nofroflo=
         # fx, fy are k/Nd and l/Nd respectively
         alpha_phase = -2*np.pi*(fx*cp_vels_x[i] + fy*cp_vels_y[i])/rate
         try:
-            alpha.append(alpha_mag[i]*(np.cos(alpha_phase) + 1j*np.sin(alpha_phase)))
+            alpha.append(alpha_mag[i]*(np.cos(alpha_phase) + 
+                                       1j*np.sin(alpha_phase)))
         except TypeError:
-            alpha.append(alpha_mag*(np.cos(alpha_phase) + 1j*np.sin(alpha_phase)))
+            # Just have a scalar for alpha_mag
+            alpha.append(alpha_mag*(np.cos(alpha_phase) + 
+                                    1j*np.sin(alpha_phase)))
 
     powerlaw = np.array(powerlaw)
     alpha = np.array(alpha)
@@ -68,7 +65,8 @@ if __name__ == '__main__':
     paramcube = np.array([(0.85, 23.2, 259, 7600),
                           (1.08, 5.7, 320, 16000)])
     alpha_mag = 0.99
-    powerlaw, alpha = create_multilayer_arbase(n, m, pscale, rate, paramcube, alpha_mag)
+    powerlaw, alpha = create_multilayer_arbase(n, m, pscale, rate, 
+                                               paramcube, alpha_mag)
 
     pl_output = pyfits.HDUList()
     pl_output.append(pyfits.PrimaryHDU(data=powerlaw.transpose()))

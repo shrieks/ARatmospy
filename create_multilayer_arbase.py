@@ -1,13 +1,27 @@
-#;; creates the starting phase screen to be used for an autoregressive
-#;; atmosphere model, the powerlaw that scales random noise generated
-#;; to make it look like Kolmogorov turbulence and alpha, the
-#;; autoregressive paramater to scale the current phase
-
 import numpy as np
 import generate_grids as gg
 
 def create_multilayer_arbase(n, m, pscale, rate, paramcube, alpha_mag,
                              boiling_only=False):
+    """
+    Function to create the starting phase screen to be used for an
+    autoregressive atmosphere model. A powerlaw scales random noise
+    generated to make it look like Kolmogorov turbulence.  alpha is
+    the autoregressive parameter to scale the current phase.
+
+    @param n          Number of subapertures across the screen
+    @param m          Number of pixels per subaperature
+    @param pscale     Pixel scale
+    @param rate       A0 system rate (Hz)
+    @param paramcube  Parameter array describing each layer of the atmosphere
+                      to be modeled.  Each row contains a tuple of 
+                      (r0 (m), velocity (m/s), direction (deg), altitude (m))
+                      describing the corresponding layer.
+    @param alpha_mag  magnitude of autoregressive parameter.  (1-alpha_mag)
+                      is the fraction of the phase from the prior time step
+                      that is "forgotten" and replaced by Gaussian noise.
+    @param boiling_only Flag to set all screen velocities to zero.
+    """
     bign = n*m
     d = pscale*m
 

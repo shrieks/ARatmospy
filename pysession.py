@@ -18,7 +18,7 @@ rate      = 1000.0
 n         = 48.0
 
 fds = True  # turn on or off frequency domain scaling in FT calc
-rootdir = '/Volumes/ShrieksProExtra/ARMovies/'
+rootdir = '/Users/srikar/Data/ARMovies/'
 #rootdir   = '/Users/srikar/Data/ARMovies/'
 #filename  = 'ar-atmos1l-0.99-20140730_122722-psd.dat'
 filename = 'ar-atmos1l-0.99-48-20140820_180148.fits'
@@ -180,14 +180,17 @@ mp.xscale('log')
 mp.xlim(1,phx)
 mp.ylim(1e-9, 1.0)
 mp.grid(True)
-mp.title('Residual phase vs. Spatial frequency')
+mp.title(r'Spatial PSD for |$\alpha$|=0.99')
 mp.xlabel('Spatial frequency [1/m]')
-mp.ylabel('Residual phase [microns^2]')
+#mp.ylabel(r'Residual phase [$\mu$m$^2$]')
+mp.ylabel(r'Power')
 
-mp.plot(kr, varpsd, 'b.')
-mp.plot(kr, varappsd,  'r.')
-mp.plot(kr, vardtpsd,  'g.')
-mp.plot(kr, 0.490*(eff_r0)**(-5./3.)*kr**(-11./3.),'k-')
+po = mp.plot(kr, varpsd, 'b.')
+pa = mp.plot(kr, varappsd,  'r.')
+pd = mp.plot(kr, vardtpsd,  'g.')
+pt = mp.plot(kr, 0.490*(eff_r0)**(-5./3.)*kr**(-11./3.),'k-')
+
+mp.legend([po[0],pa[0],pd[0], pt[0]], ['Open loop (OL)', 'OL + aperture', 'OL + aperture/depiston/detilt', 'Theoretical'],loc='upper right')
 
 #'GPI Telemetry 2013.11.12_0.27.6', 'GPI Telemetry 2014.5.9_18.49.3', 'GPI Simulation AR alpha=0.99', 'GPI Simulation AR alpha=0.999']
 #mp.plot(kr, 0.490*(50.)**(-8./3.)*kr**(-10./3.), 'g-')

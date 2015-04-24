@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as mp
 #import os.path as op
 
-import check_ar_atmos as caa
+#import check_ar_atmos as caa
 import generate_grids as gg
 import gen_avg_per_unb as gapu
 
@@ -94,6 +94,7 @@ while mode is not 'q':
     #mp.show()
     mode = raw_input('Enter mode - k,l: ')
 
+# Open Loop PSDs
 # 3-layer, 22.1s files, phase in radians
 f21s = rootdir + 'ARMovies/22s/'
 psd21ol = [f21s+'gpi_arf_rate1000_exptime22.1_amag0.99',
@@ -117,7 +118,10 @@ hz      = np.roll(f-perlen/2, np.int(perlen/2))/perlen*rate
 shz     = np.sort(hz)         # sorted array of temporal frequency
 ahz     = np.argsort(hz)      # indices of sorted temporal frequency array to use for 
                               # for putting other arrays in the same order
+hzp     = hz[0:perlen/2]      # positive hertz - ascending, perlen is always a power of 2
+hzn     = hz[perlen/2:perlen] # negative hertz - ascending from -500 to 0
 omega   = 2*np.pi*shz/rate
+
 kx, ky  = gg.generate_grids(bign, scalefac=2*np.pi/(bign*pscale), freqshift=True)
 kr      = np.sqrt(kx**2 + ky**2)
 r2m     = (0.8/(2.0*np.pi))**2  # radians to microns at 0.8 micron wavelength
@@ -126,7 +130,9 @@ ffrate  = 1500.0
 ffhz    = np.roll(f-perlen/2, np.int(perlen/2))/perlen*ffrate
 ffshz   = np.sort(ffhz)         # sorted array of temporal frequency
 ffahz   = np.argsort(ffhz)      # indices of sorted temporal frequency array to use for 
-                              # for putting other arrays in the same order
+                                # for putting other arrays in the same order
+ffhzp   = ffhz[0:perlen/2] 
+ffhzn   = ffhz[perlen/2:perlen]                
 ffomega = 2*np.pi*ffshz/ffrate
 
 
@@ -140,7 +146,8 @@ psdffhdu3   = pf.open(psdffol[1]+'-psd.fits', memmap=True, ignore_missing_end=Tr
 psdff3      = psdffhdu3[0].data
 
 
-mode = '2,1'
+#mode = '2,1'
+mode = '2,0'
 while mode is not 'q': 
     mode = mode.split(',')
     k = int(mode[0])
@@ -153,20 +160,38 @@ while mode is not 'q':
         mp.xlim(-150,150)
     else:
         mp.xlim(np.min(hz),np.max(hz))
+    mp.xlim(0.1, np.max(hz))
+    mp.xscale('log')
+
     mp.xlabel('Temporal frequency [Hz]')
     mp.ylabel('Power')
     mp.title('3-layer Open Loop Temporal PSD for mode k=%s, l=%s' %(mode[0],mode[1]))
     p99, = mp.plot(shz, psd99[ahz,k,l], 'r-')
+    # plot positive frequencies, cumulative power element up
+    p99cp, = mp.plot(hzp, np.cumsum(psd99[0:perlen/2,k,l]),'r--')
+    # select correct 1D subarray for negative frequency power
+    psd99cn = psd99[perlen/2:perlen,k,l]
+    # plot negative hertz backwards from 0 to -500 and cum sum of power backwards too
+    p99cn, = mp.plot(hzn[::-1], np.cumsum(psd99cn[::-1]),'r--')
+    #p99, = mp.plot(shz, np.cumsum(psd99[ahz,k,l],axis=0), 'r-' # cumulative power
     #mp.plot(shz, 0.490*eff_r0**(-5./3.)*kr[k,l]**(-11./3.)*r2m/np.abs(1 - 0.99*np.exp(-1j*omega))**2, 'r--')
 
     p999, = mp.plot(shz, psd999[ahz,k,l], 'b-')
+    p999cp,  = mp.plot(hzp, np.cumsum(psd999[0:perlen/2,k,l]),'b--')
+    psd999cn = psd999[perlen/2:perlen,k,l]
+    p999cn,  = mp.plot(hzn[::-1], np.cumsum(psd999cn[::-1]),'b--')
     #p9999,= mp.plot(shz, psd9999[ahz,k,l]*r2m, 'g-')
 
     #pff,  = mp.plot(shz, psdff[ahz,k,l], 'k-')
     #pff2, = mp.plot(shz, psdff2[ahz,k,l], 'k--')
     pff3, = mp.plot(ffshz, psdff3[ffahz,k,l], 'k-')
+    pffcp, = mp.plot(ffhzp, np.cumsum(psdff3[0:perlen/2,k,l]),'k--')
+    psdffcn  =  psdff3[perlen/2:perlen,k,l]
+    pffcn, = mp.plot(ffhzn[::-1], np.cumsum(psdffcn[::-1]),'k--')
     #pgpi, = mp.plot(shz, gpipsd[ahz,k,l]/r2m,'m--', linewidth=2)
-    mp.legend([p99, p999, pff3],[r'|$\alpha$|=0.99',r'|$\alpha$|=0.999','Frozen flow'],loc=legloc)
+    leg1 = mp.legend([pff3, pffcp],['Power', 'Cumulative Power'],loc=(0.6,0.33))
+    ax = mp.gca().add_artist(leg1)
+    mp.legend([p99, p999, pff3],[r'|$\alpha$|=0.99',r'|$\alpha$|=0.999','Frozen flow'],loc=(0.025,0.25))
     #mp.legend(#[p99, p999, pff, pgpi],
               #[r'|$\alpha$|=0.99',r'|$\alpha$|=0.999','Frozen Flow', 'GPI Telemetry'],
     #          loc='lower center')
@@ -216,6 +241,7 @@ while mode is not 'q':
     mp.figure(3)
     mp.clf()
     mp.yscale('log')
+    mp.ylim(1e-8,1e-1)
     #mp.xscale('symlog')
     if zoom:
         mp.xlim(-150,150)
@@ -225,16 +251,30 @@ while mode is not 'q':
     mp.ylabel('Power')
     mp.title('3-layer Closed Loop Temporal PSD for mode k=%s, l=%s' %(mode[0],mode[1]))
     p99, = mp.plot(shz, psd99[ahz,k,l], 'r-')
+    p99cp, = mp.plot(hzp, np.cumsum(psd99[0:perlen/2,k,l]),'r--')
+    psd99cn = psd99[perlen/2:perlen,k,l]
+    p99cn, = mp.plot(hzn[::-1], np.cumsum(psd99cn[::-1]),'r--')
+    
     #mp.plot(shz, 0.490*eff_r0**(-5./3.)*kr[k,l]**(-11./3.)*r2m/np.abs(1 - 0.99*np.exp(-1j*omega))**2, 'r--')
 
     p999, = mp.plot(shz, psd999[ahz,k,l], 'b-')
+    p999cp,  = mp.plot(hzp, np.cumsum(psd999[0:perlen/2,k,l]),'b--')
+    psd999cn = psd999[perlen/2:perlen,k,l]
+    p999cn,  = mp.plot(hzn[::-1], np.cumsum(psd999cn[::-1]),'b--')
+
     pff,  = mp.plot(ffshz, psdff[ffahz,k,l], 'k-')
+    pffcp, = mp.plot(ffhzp, np.cumsum(psdff[0:perlen/2,k,l]),'k--')
+    psdffcn  =  psdff[perlen/2:perlen,k,l]
+    pffcn, = mp.plot(ffhzn[::-1], np.cumsum(psdffcn[::-1]),'k--')
+
     if addgpi:
         pgpi, = mp.plot(shz, gpipsd[ahz,k,l]/r2m,'m--', linewidth=2)
         mp.legend([p99, p999, pff, pgpi],
                   [r'|$\alpha$|=0.99',r'|$\alpha$|=0.999','Frozen Flow', 'GPI Telemetry'],
                   loc=legloc)
     else:
+        leg1 = mp.legend([pff3, pffcp],['Power', 'Cumulative Power'],loc=(0.6,0.025))
+        ax = mp.gca().add_artist(leg1)
         mp.legend([p99, p999, pff],
                   [r'|$\alpha$|=0.99',r'|$\alpha$|=0.999','Frozen Flow'],
                   loc=legloc)

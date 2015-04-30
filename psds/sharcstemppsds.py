@@ -103,7 +103,7 @@ while fmode is not 'q':
     
         #mp.legend([psdplot],['ShARCS (rate=1000, perlen=1024)'], loc=legloc)
         mp.grid(True)
-        #mp.show()
+        mp.show()
         mode = raw_input('Enter mode - k,l: ')
 
     #fmode = raw_input('Enter to go to next file, number to jump to file, q to quit: ')

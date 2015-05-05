@@ -8,14 +8,12 @@ import gen_avg_per_unb as gapu
 import cdr_create_parameters as ccp
 
 def check_ar_atmos(filename, perlen, alpha_mag, rate, n,
-                   compare=False, dopsd=False, mini=False, newfmt=False):
+                   compare=False, dopsd=False, newfmt=False):
     # Build in capability for handling FITS files or HDF5 files
     # Add in memmap option once arrays cross 1K
     # add in parallel processing option too
-    #if mini:
-    rootdir = '/Users/srikar/Data/ARMovies/'
-    #else:
-        #rootdir = '/Volumes/ShrieksProExtra/ARMovies/'
+    #rootdir = '/Users/srikar/Data/ARMovies/'
+    rootdir = '.'
 
     # Gemini parameters. Change to read from FITS header or HDF5 metadata
     bigD  = 7.770                   # primary diameter

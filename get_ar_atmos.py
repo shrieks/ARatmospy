@@ -9,7 +9,7 @@ def get_ar_atmos(phaseFT, powerlaw, alpha, nofroflo=False, first=False):
 #;; Returns one frame of an n-layer frozen flow atmosphere with boiling 
 #;; sized for the telescope parameters embdedded in powerlaw and alpha
 #;; Inputs:
-#;;        phase    - base phase screen to use as starting point
+#;;        phaseFT  - base phase screen to use as starting point
 #;;                   bign x bign x n_layers array
 #;;        powerlaw - powerlaw to scale noise to conform to system
 #;;                   geometry

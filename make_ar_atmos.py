@@ -153,7 +153,7 @@ def make_ar_atmos(exptime, rate, alpha_mag, n, m, nofroflo=False, dept=False):
              if dept:
                  import depiston as dp
                  import detilt as dt
-                 phase[*,*,i,t] = depiston(detilt(wf,aperture),aperture)*aperture
+                 phase[:,:,i,t] = depiston(detilt(wf,aperture),aperture)*aperture
              else:
                  phase[:,:,i,t] = wf
         

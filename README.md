@@ -1,7 +1,7 @@
 # AR-atmospheres-py
 Python version of autoregressive atmosphere generator
 
-Relevant proceedings paper (hence, a little rough around the edges) on SPIE:  
+Relevant paper:  
 _A computationally efficient autoregressive method for generating phase screens with frozen flow and turbulence in optical simulations_  
 Srikar Srinath, Univ. of California, Santa Cruz; Lisa A. Poyneer, Lawrence Livermore National Lab.;  
 Alexander R. Rudy, UCSC; S. Mark Ammons, LLNL  

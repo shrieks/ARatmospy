@@ -2,11 +2,12 @@
 Python version of autoregressive atmosphere generator
 
 Relevant proceedings paper (hence, a little rough around the edges) on SPIE:  
-_Remembrance of phases past: An autoregressive method for generating realistic atmospheres in simulations_  
+_A computationally efficient autoregressive method for generating phase screens with frozen flow and turbulence in optical simulations_  
 Srikar Srinath, Univ. of California, Santa Cruz; Lisa A. Poyneer, Lawrence Livermore National Lab.;  
 Alexander R. Rudy, UCSC; S. Mark Ammons, LLNL  
-Published in *Proceedings Volume 9148: Adaptive Optics Systems IV*  
-September 2014  
+Published in Optics Express 23, 33335-33349 (2015)
+
+http://dx.doi.org/10.1364/OE.23.033335
 
 ##### Programs for basic operations:
 _make_ar_atmos_: A program that generates a datacube (2 spatial dimensions x time) in fits format (hdf5 outout not implemented yet)

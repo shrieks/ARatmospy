@@ -58,7 +58,11 @@ def make_ar_atmos(exptime, rate, alphaParams, n, m, telescope='GPI', nofroflo=Fa
         bigD  = 3.048
         bigDs = 0.990
         nacross = 16.0              ## this will have to change when 32x (30 across) mode is operational
-    else:
+    else:                           # Keck II numbers by default
+        bigD  = 9.96                # effective circular equivalent diameter
+        bigDs = 0.87                # for f/15 secondary to Naysmith platform
+        nacross = 100.0             # Updated WFS from 2007 is 100x100 lenslets
+    
     ## derived quantities
     bign      = n*m               ## width of phase screen for aperture
 

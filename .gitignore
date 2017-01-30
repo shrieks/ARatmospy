@@ -10,3 +10,5 @@
 psds/Icon
 
 Icon
+
+*.pyc

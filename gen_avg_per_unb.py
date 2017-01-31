@@ -1,5 +1,6 @@
 import numpy as np
 import pyfftw as pf
+#import scipy.fftpack as sf
 
 def gen_avg_per_unb(closedloop_data, interval_length, halfover=False, meanrem=False,
                     hanning=False, hamming=False, nofftw=False):

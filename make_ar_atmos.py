@@ -1,11 +1,14 @@
+import os, os.path
+import datetime
 import numpy as np
 import numpy.random as ra
 import scipy.fftpack as sf
-import pyfits as pf
-import generate_grids as gg
-import os, os.path
+from astropy.io import fits
+from .generate_grids import generate_grids
+from .gen_avg_per_unb import gen_avg_per_unb
 
-def make_ar_atmos(exptime, rate, alphaParams, n, m, telescope='GPI', nofroflo=False, dept=False, vxvy=True):   
+def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofroflo=False, dept=False, 
+                  dopsd=False, phmicrons=True, savefile=False, savelayers=False, outdir='.'):   
     """
     ######################
     ## Srikar Srinath - 2015-02-06
@@ -14,10 +17,8 @@ def make_ar_atmos(exptime, rate, alphaParams, n, m, telescope='GPI', nofroflo=Fa
     ## Inputs:
     ##       exptime   - (float) exposure time in seconds
     ##       rate      - (float) optical system rate/cadence in Hertz (Gemini uses 1500 Hz)
-    ##       alphaParams - array with each row corresponding to parameters for a given layer
+    ##       alpha_params - array with each row corresponding to parameters for a given layer
     ##                     [alphaMag, r0 (m), vx (m/s), vy (m/s), altitude (m)]
-    ##                     If vxvy flag set to False then
-    ##                     [alphaMag, r0 (m), v (m/s), direction (degrees clockwise 0=North), altitude (m)]
     ##                     alphaMag in range [0.990,0.999]
     ##                     (1 - alphaMag) determines fraction of phase from
     ##                     prior timestep that is "forgotten" e.g. 
@@ -31,20 +32,28 @@ def make_ar_atmos(exptime, rate, alphaParams, n, m, telescope='GPI', nofroflo=Fa
     ##                   i.e. all frozen flow velocities set to 0
     ##        dept     - depiston and detilt the output and impose the
     ##                   aperture
-    ##        vxvy     - If True then alphaParams array has wind information given as vx and vy
-    ##                   else wind information is velocity (m/s) and direction (degrees)
     ##        telescope - parameters for various telescopes. Currently popuated below. Should become
     ##                    a passed array or structure
-    ##        hdf5     - Save to HDF5 format instead
     ## Outputs:
     ##        phase    - fits file with bign x bign x timesteps
     """
 
-    rootdir = '.'
+    if savefile:
+        # filnename root for a multilayer simulation-worthy datacube
+        timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')
+        arfileroot = ('ar_'+ timestamp + '_rate'+str(np.round(rate)) + '_exptime'+str(np.round(exptime))
+                     + '_n'+str(np.round(n)))
+        aroutfile = os.path.join(outdir, arfileroot)
+    
+    if savelayers:
+        layerfileroot = arfileroot+'_layer'
+        layeroutfile  = os.paht.join(outdir, layerfileroot)
 
-    # filnename root for a multilayer simulation-worthy datacube
-    arfileroot = rootdir +'aratmos'+'_rate'+str(np.round(rate))+'_exptime'+str(exptime)+'_amag'+str(alpha_mag)
-    layerfileroot = arfileroot+'-layer'
+    if dopsd:
+        if rate < 800.0: 
+            per_len = 1024.0
+        else:
+            per_len = 2048.0
 
     if telescope is 'GPI':
         bigD  = 7.77010              ## primary diameter - 7.7 for Gemini, 8.4 for LSST
@@ -79,36 +88,43 @@ def make_ar_atmos(exptime, rate, alphaParams, n, m, telescope='GPI', nofroflo=Fa
 
     timesteps = exptime * rate #np.floor(exptime * rate)   ## number of timesteps 
 
-    # create atmosphere parameter array, 
-    #                      ( r0,     vel,    dir, alt] x n_layers
-    #                      meters,   m/s,degrees (0-360), meters
-    cp_params = np.array([
-                         #(0.40	,    6.9	,284,  0		),
-                         #(0.78	,    7.5	,267,  25		),
-                         #(1.07	,    7.8	,244,  50		),
-                         #(1.12	,    8.3	,267,  100		),
-                         #(0.84	,    9.6	,237,  200		),
-                         #(0.68	,    9.9	,232,  400		),
-                         #(0.66	,    9.6	,286,  800		),
-                         #(0.91	,    10.1	,293,  1600		),
-                         #(0.40	,    7.2	,270,  3400		),
-                         #(0.50	,    16.5	,269,  6000		),
-                         (0.85	,    23.2	, 59,  7600		),
-                         #(1.09	,    32.7	,259,  13300	),
-                         (1.08	,    5.7	,320,  16000	)])
+    # create atmosphere parameter array
+    if alpha_params is None:
+        # use default Cerro Pachon parameters from Tokovinin 2002 paper
+        # change to relevant Mauna kea params instead?
+        #                      ( r0,     vel,    dir, alt] x n_layers
+        #                      meters,   m/s,degrees (0-360), meters
+        cp_params = np.array([
+                              #(0.40	,    6.9	,284,  0		),
+                              #(0.78	,    7.5	,267,  25		),
+                              #(1.07	,    7.8	,244,  50		),
+                              #(1.12	,    8.3	,267,  100		),
+                              #(0.84	,    9.6	,237,  200		),
+                              #(0.68	,    9.9	,232,  400		),
+                              #(0.66	,    9.6	,286,  800		),
+                              #(0.91	,    10.1	,293,  1600		),
+                              #(0.40	,    7.2	,270,  3400		),
+                              #(0.50	,    16.5	,269,  6000		),
+                              (0.85	,    23.2	, 59,  7600		),
+                              #(1.09	,    32.7	,259,  13300	),
+                              (1.08	,    5.7	,320,  16000	)])
 
-    #print cp_params
-    n_layers  = cp_params.shape[0]
-
-    r0s       = cp_params[:,0]              ## r0 in meters
-    vels      = cp_params[:,1]              ## m/s,  set to 0 to get pure boiling
-    if nofroflo: 
-        vels = vels * 0.0
-    dirs      = cp_params[:,2] * np.pi/180. ## in radians
-
-    ## decompose velocities into components
-    vels_x    = vels * np.cos(dirs)
-    vels_y    = vels * np.sin(dirs)
+        #print cp_params
+        n_layers  = cp_params.shape[0]
+        
+        r0s       = cp_params[:,0]              ## r0 in meters
+        vels      = cp_params[:,1]              ## m/s,  set to 0 to get pure boiling
+        dirs      = cp_params[:,2] * np.pi/180. ## in radians
+        
+        ## decompose velocities into components
+        vx    = vels * np.cos(dirs)
+        vy    = vels * np.sin(dirs)
+    else:
+        n_layers  = alpha_params.shape[0]
+        r0s       = alpha_params[:,0]
+        vx        = alpha_params[:,1]
+        vy        = alpha_params[:,2]
+        
     
     # generate spatial frequency grids
     screensize_meters = bign * pscale
@@ -124,13 +140,13 @@ def make_ar_atmos(exptime, rate, alphaParams, n, m, telescope='GPI', nofroflo=Fa
     #phvar = np.zeros((timesteps, n_layers),dtype=float)            ## phase variance at each timestep
 
     for i in np.arange(n_layers):
-        # Set the noise scaling powerlaw - the powerlaw below if from Johansson & Gavel 1994 for a 
+        # Set the noise scaling powerlaw - the powerlaw below is from Johansson & Gavel 1994 for a 
         # Kolmogorov screen
         powerlaw = (2*np.pi*np.sqrt(0.00058)*(r0s[i]**(-5.0/6.0))*
                     (fx**2 + fy**2)**(-11.0/12.0)*bign*np.sqrt(np.sqrt(2.))/screensize_meters)
         powerlaw[0,0] = 0.0
         ## make array for the alpha parameter and populate it
-        alpha_phase = - 2 * np.pi * (fx*vels_x[i] + fy*vels_y[i]) / rate
+        alpha_phase = - 2 * np.pi * (fx*vx[i] + fy*vy[i]) / rate
 
         # alpha magnitude can be different for each layer (and each Fourier mode) - to be
         # implemented later
@@ -141,44 +157,56 @@ def make_ar_atmos(exptime, rate, alphaParams, n, m, telescope='GPI', nofroflo=Fa
         alpha = alpha_mag * (np.cos(alpha_phase) + 1j * np.sin(alpha_phase))
 
         noisescalefac = np.sqrt(1 - (np.abs(alpha))**2)
-        print('Layer {} alpha created'.format(str(i+1)))
+        print('Layer {} alpha created'.format(str(i)))
       
         for t in np.arange(timesteps):
-             # generate noise to be added in, FT it and scale by powerlaw
-             noise = np.random.randn(bign,bign)
+            # generate noise to be added in, FT it and scale by powerlaw
+            noise = np.random.randn(bign,bign)
 
-             ## no added noise yet, start with a regular phase screen
-             noiseFT = sf.fft2(noise) * powerlaw
+            ## no added noise yet, start with a regular phase screen
+            noiseFT = sf.fft2(noise) * powerlaw
 
-             if t == 0:
-                 wfFT = noiseFT
-                 phFT[:,:,i,t] = noiseFT
-             else:      
-             # autoregression AR(1)
-             # the new wavefront = alpha * wfnow + noise
-                 wfFT = alpha * phFT[:,:,i,t-1] + noiseFT * noisescalefac
-                 phFT[:,:,i,t] = wfFT
+            if t == 0:
+                wfFT = noiseFT
+                phFT[:,:,i,t] = noiseFT
+            else:      
+            # autoregression AR(1)
+            # the new wavefront = alpha * wfnow + noise
+                wfFT = alpha * phFT[:,:,i,t-1] + noiseFT * noisescalefac
+                phFT[:,:,i,t] = wfFT
             
-             # the new phase is the real_part of the inverse FT of the above
-             wf = sf.ifft2(wfFT).real
-             #phrms[t,i] = rms(wf)
-             #phvar[t,i] = np.var(wf)
+            # the new phase is the real_part of the inverse FT of the above
+            wf = sf.ifft2(wfFT).real
+            #phrms[t,i] = rms(wf)
+            #phvar[t,i] = np.var(wf)
  
-             # impose aperture, depiston, detilt, if desired
-             if dept:
-                 import depiston as dp
-                 import detilt as dt
-                 phase[:,:,i,t] = depiston(detilt(wf,aperture),aperture)*aperture
-             else:
-                 phase[:,:,i,t] = wf
+            # impose aperture, depiston, detilt, if desired
+            if dept:
+                import depiston as dp
+                import detilt as dt
+                phase[:,:,i,t] = depiston(detilt(wf,aperture),aperture)*aperture
+            else:
+                phase[:,:,i,t] = wf
         
-        print('Writing layer {} file'.format(str(i+1)))  
-        phase[:,:,i,:].shape 
-        hdu = pf.PrimaryHDU(phase[:,:,i,:].transpose())
-        hdu.writeto(layerfileroot+str(i+1)+'.fits', clobber=True)
-        print('Done with Layer {}'.format(str(i+1)))
+        if savelayers:
+            print('Writing layer {} file'.format(str(i)))  
+            phase[:,:,i,:].shape 
+            hdu = fits.PrimaryHDU(phase[:,:,i,:].transpose())
+            hdu.writeto(layerfileroot+str(i)+'.fits', clobber=True)
 
-    phaseout = np.sum(phase, axis=2)  # sum along layer axis
-    hdu = pf.PrimaryHDU(phaseout.transpose())
-    hdu.writeto(arfileroot+'.fits', clobber=True)
-    print('Done')
+        print('Done with Layer {}'.format(str(i)))
+
+    # collapse to one summed screen
+    phaseout = np.sum(phase, axis=2)  # sum along layer axis, in radians of phase
+    
+    if phmicrons:
+        phaseout /= 4*np.pi   # convert to microns at 500 nm
+    
+    if savefile: 
+        hdu = fits.PrimaryHDU(phaseout.transpose())
+        hdu.writeto(arfileroot+'.fits', clobber=True)
+    else:
+        return phaseout
+
+    print('Done generating {}-layer AR atmopshere file with params n={}, m={}, rate={}, time={}s'
+           .format(n_layers, n, m, rate, exptime))

@@ -10,32 +10,39 @@ from .gen_avg_per_unb import gen_avg_per_unb
 def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofroflo=False, dept=False, 
                   dopsd=False, phmicrons=True, savefile=False, savelayers=False, outdir='.'):   
     """
-    ######################
-    ## Srikar Srinath - 2015-02-06
-    ## Makes an multi-layer frozen flow atmosphere with boiling sized for the
-    ## telescope parameters in the first few lines of the program
-    ## Inputs:
-    ##       exptime   - (float) exposure time in seconds
-    ##       rate      - (float) optical system rate/cadence in Hertz (Gemini uses 1500 Hz)
-    ##       alpha_params - array with each row corresponding to parameters for a given layer
-    ##                     [alphaMag, r0 (m), vx (m/s), vy (m/s), altitude (m)]
-    ##                     alphaMag in range [0.990,0.999]
-    ##                     (1 - alphaMag) determines fraction of phase from
-    ##                     prior timestep that is "forgotten" e.g. 
-    ##                     alpha_mag = 0.9 implies 10% forgotten
-    ##       n         - number of subapertures across screen (not the
-    ##                   number of subapertures across the aperture, which
-    ##                   is less than this number)
-    ##       m         - number of pixels per subaperture (Gemini sim uses n=48, m=8)
-    ## Flags:
-    ##        nofroflo - flag that gives a "boiling only" atmosphere if True
-    ##                   i.e. all frozen flow velocities set to 0
-    ##        dept     - depiston and detilt the output and impose the
-    ##                   aperture
-    ##        telescope - parameters for various telescopes. Currently popuated below. Should become
-    ##                    a passed array or structure
-    ## Outputs:
-    ##        phase    - fits file with bign x bign x timesteps
+    ####################
+     Srikar Srinath - 2015-02-06
+     Makes an multi-layer frozen flow atmosphere with boiling sized for the
+     telescope parameters in the first few lines of the program
+     Inputs:
+           exptime   - (float) exposure time in seconds
+           rate      - (float) optical system rate/cadence in Hertz (Gemini uses 1500 Hz)
+           n         - number of subapertures across screen (not the
+                       number of subapertures across the aperture, which
+                       is less than this number)
+           m         - number of pixels per subaperture (Gemini sim uses n=48, m=8)
+     Optional:
+           alpha_params - array with each row corresponding to parameters for a given layer
+                         [alphaMag, r0 (m), vx (m/s), vy (m/s), altitude (m)]
+                         alphaMag in range [0.990,0.999]
+                         (1 - alphaMag) determines fraction of phase from
+                         prior timestep that is "forgotten" e.g. 
+                         alpha_mag = 0.9 implies 10% forgotten
+     Flags:
+            telescope - parameters for various telescopes. Currently popuated below. Should become
+                        a passed array or structure
+            nofroflo  - flag that gives a "boiling only" atmosphere if True
+                        i.e. all frozen flow velocities set to 0
+            dept      - depiston and detilt the output and impose the
+                        aperture
+            dopsd     - calculate and return the PSD of the phase array as well
+            phmicrons - convert phase from radians to microns at 500 nm
+            savefile  - save a fits file with the phase screen output
+                        dopsd adds on a PSD HDU as well
+            savelayers- save indivdual wind layers as separate phase screen arrays
+            outdir    - change to save output files to a directory other than current
+     Outputs:
+            phase    - fits file with bign x bign x timesteps
     """
 
     if savefile:
@@ -202,6 +209,9 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
     
     if phmicrons:
         phaseout /= 4*np.pi   # convert to microns at 500 nm
+    
+    if dopsd:
+        
     
     if savefile: 
         hdu = fits.PrimaryHDU(phaseout.transpose())

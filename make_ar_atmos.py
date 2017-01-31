@@ -50,10 +50,10 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
         layeroutfile  = os.paht.join(outdir, layerfileroot)
 
     if dopsd:
-        if rate < 800.0: 
-            per_len = 1024.0
+        if rate < 800: 
+            per_len = 1024
         else:
-            per_len = 2048.0
+            per_len = 2048
 
     if telescope is 'GPI':
         bigD  = 7.77010              ## primary diameter - 7.7 for Gemini, 8.4 for LSST
@@ -73,20 +73,20 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
         nacross = 100.0             # Updated WFS from 2007 is 100x100 lenslets
     
     ## derived quantities
-    bign      = n*m               ## width of phase screen for aperture
+    bign      = np.int(n*m)               ## width of phase screen for aperture
 
     ## for phase samples
     pscale    = bigD/nacross ## pixel size (m) of samples in pupil plane
     d         = pscale*m   ## subap diameter (m)
 
     ### make the aperture to impose later if desired
-    ax, ay    = gg.generate_grids(bign, scalefac=pscale)
+    ax, ay    = generate_grids(bign, scalefac=pscale)
     ar        = np.sqrt(ax**2 + ay**2) ## aperture radius
     ap_outer  = (ar <= bigD/2)
     ap_inner  = (ar <= bigDs/2)   
     aperture  = (ap_outer - ap_inner).astype(int)
 
-    timesteps = exptime * rate #np.floor(exptime * rate)   ## number of timesteps 
+    timesteps = np.int(np.floor(exptime * rate))   ## number of timesteps 
 
     # create atmosphere parameter array
     if alpha_params is None:
@@ -110,8 +110,8 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
                               (1.08	,    5.7	,320,  16000	)])
 
         #print cp_params
-        n_layers  = cp_params.shape[0]
-        
+        n_layers  = np.int(cp_params.shape[0])
+        alpha_mag = [0.95, 0.99]
         r0s       = cp_params[:,0]              ## r0 in meters
         vels      = cp_params[:,1]              ## m/s,  set to 0 to get pure boiling
         dirs      = cp_params[:,2] * np.pi/180. ## in radians
@@ -120,16 +120,17 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
         vx    = vels * np.cos(dirs)
         vy    = vels * np.sin(dirs)
     else:
-        n_layers  = alpha_params.shape[0]
-        r0s       = alpha_params[:,0]
-        vx        = alpha_params[:,1]
-        vy        = alpha_params[:,2]
+        n_layers  = np.int(alpha_params.shape[0])
+        alpha_mag = alpha_params[:,0]
+        r0s       = alpha_params[:,1]
+        vx        = alpha_params[:,2]
+        vy        = alpha_params[:,3]
         
     
     # generate spatial frequency grids
     screensize_meters = bign * pscale
     deltaf = 1./screensize_meters           ## spatial frequency delta
-    fx, fy = gg.generate_grids(bign, scalefac=deltaf, freqshift=True)
+    fx, fy = generate_grids(bign, scalefac=deltaf, freqshift=True)
 
     phase = np.zeros((bign,bign,n_layers,timesteps),dtype=float)
     # the method only needs phaseFT from the previous timestep so this is unnecessary if memory
@@ -139,12 +140,12 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
     #phrms = np.zeros((timesteps, n_layers),dtype=float)            ## phase rms at each timestep
     #phvar = np.zeros((timesteps, n_layers),dtype=float)            ## phase variance at each timestep
 
-    for i in np.arange(n_layers):
+    for i in np.arange(n_layers, dtype=int):
         # Set the noise scaling powerlaw - the powerlaw below is from Johansson & Gavel 1994 for a 
         # Kolmogorov screen
         powerlaw = (2*np.pi*np.sqrt(0.00058)*(r0s[i]**(-5.0/6.0))*
                     (fx**2 + fy**2)**(-11.0/12.0)*bign*np.sqrt(np.sqrt(2.))/screensize_meters)
-        powerlaw[0,0] = 0.0
+        powerlaw[0,0] = 0.0  # takes care of divide by zero when fx, fy = 0
         ## make array for the alpha parameter and populate it
         alpha_phase = - 2 * np.pi * (fx*vx[i] + fy*vy[i]) / rate
 
@@ -154,12 +155,12 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
         #    alpha = alpha_mag[i] * (np.cos(alpha_phase) + 1j * np.sin(alpha_phase))
         #else:
         #    alpha = alpha_mag * (np.cos(alpha_phase) + 1j * np.sin(alpha_phase)) 
-        alpha = alpha_mag * (np.cos(alpha_phase) + 1j * np.sin(alpha_phase))
+        alpha = alpha_mag[i] * (np.cos(alpha_phase) + 1j * np.sin(alpha_phase))
 
         noisescalefac = np.sqrt(1 - (np.abs(alpha))**2)
         print('Layer {} alpha created'.format(str(i)))
       
-        for t in np.arange(timesteps):
+        for t in np.arange(timesteps, dtype=int):
             # generate noise to be added in, FT it and scale by powerlaw
             noise = np.random.randn(bign,bign)
 
@@ -182,8 +183,8 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
  
             # impose aperture, depiston, detilt, if desired
             if dept:
-                import depiston as dp
-                import detilt as dt
+                from .depiston import depiston
+                from .detilt import detilt
                 phase[:,:,i,t] = depiston(detilt(wf,aperture),aperture)*aperture
             else:
                 phase[:,:,i,t] = wf
@@ -192,7 +193,7 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
             print('Writing layer {} file'.format(str(i)))  
             phase[:,:,i,:].shape 
             hdu = fits.PrimaryHDU(phase[:,:,i,:].transpose())
-            hdu.writeto(layerfileroot+str(i)+'.fits', clobber=True)
+            hdu.writeto(layerfileroot+str(i)+'.fits', overwrite=True)
 
         print('Done with Layer {}'.format(str(i)))
 
@@ -204,7 +205,7 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
     
     if savefile: 
         hdu = fits.PrimaryHDU(phaseout.transpose())
-        hdu.writeto(arfileroot+'.fits', clobber=True)
+        hdu.writeto(arfileroot+'.fits', overwrite=True)
     else:
         return phaseout
 

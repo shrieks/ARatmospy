@@ -112,7 +112,7 @@ def check_ar_atmos(filename, perlen, alpha_mag, rate, n,
         mp.clf()
         mp.yscale('log')
         mp.xlim(-200,200)
-        mp.plot(hz, this_psd[:,4,4]/np.abs(1-alpha_mag*np.exp(-1j*2*np.pi*hz/rate))**2)
+        mp.plot(hz, this_psd[:,k,l])
         # 0.490*eff_r0**(-5./3.)*kr[4,4]**(-11./3.)/np.abs(1-alpha_mag*np.exp(-1j*2*np.pi*hz/rate))**2
         mp.grid(True)
         mp.show()

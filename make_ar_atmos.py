@@ -3,12 +3,13 @@ import datetime
 import numpy as np
 import numpy.random as ra
 import scipy.fftpack as sf
+import matplotlib.pyplot as mp
 from astropy.io import fits
 from .generate_grids import generate_grids
 from .gen_avg_per_unb import gen_avg_per_unb
 
-def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofroflo=False, dept=False, 
-                  dopsd=False, phmicrons=True, savefile=False, savelayers=False, outdir='.'):   
+def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofroflo=False, depiston=True, 
+                  detilt=False, dopsd=False, phmicrons=True, savefile=False, savelayers=False, outdir='.'):   
     """
     ####################
      Srikar Srinath - 2015-02-06
@@ -56,8 +57,10 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
         layerfileroot = arfileroot+'_layer'
         layeroutfile  = os.paht.join(outdir, layerfileroot)
 
+    timesteps = np.int(np.floor(exptime * rate))   ## number of timesteps 
+    
     if dopsd:
-        if rate < 800: 
+        if timesteps < 4096: 
             per_len = 1024
         else:
             per_len = 2048
@@ -91,9 +94,7 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
     ar        = np.sqrt(ax**2 + ay**2) ## aperture radius
     ap_outer  = (ar <= bigD/2)
     ap_inner  = (ar <= bigDs/2)   
-    aperture  = (ap_outer - ap_inner).astype(int)
-
-    timesteps = np.int(np.floor(exptime * rate))   ## number of timesteps 
+    aperture  = (ap_outer ^ ap_inner).astype(int)
 
     # create atmosphere parameter array
     if alpha_params is None:
@@ -143,7 +144,7 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
     # the method only needs phaseFT from the previous timestep so this is unnecessary if memory
     # constraints exist - just save FT of the phase for the current timestep and update with the new
     # FT instead. This array is useful and saves time for PSD calculations
-    phFT  = np.zeros((bign,bign,n_layers,timesteps),dtype=complex)  ## array for FT of phase
+    # phFT  = np.zeros((bign,bign,n_layers,timesteps),dtype=complex)  ## array for FT of phase
     #phrms = np.zeros((timesteps, n_layers),dtype=float)            ## phase rms at each timestep
     #phvar = np.zeros((timesteps, n_layers),dtype=float)            ## phase variance at each timestep
 
@@ -176,12 +177,13 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
 
             if t == 0:
                 wfFT = noiseFT
-                phFT[:,:,i,t] = noiseFT
+                # phFT[:,:,i,t] = noiseFT
             else:      
             # autoregression AR(1)
             # the new wavefront = alpha * wfnow + noise
-                wfFT = alpha * phFT[:,:,i,t-1] + noiseFT * noisescalefac
-                phFT[:,:,i,t] = wfFT
+                wfFT = alpha * wfFT + noiseFT * noisescalefac
+                # wfFT = alpha * phFT[:,:,i,t-1] + noiseFT * noisescalefac
+                # phFT[:,:,i,t] = wfFT
             
             # the new phase is the real_part of the inverse FT of the above
             wf = sf.ifft2(wfFT).real
@@ -189,18 +191,22 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
             #phvar[t,i] = np.var(wf)
  
             # impose aperture, depiston, detilt, if desired
-            if dept:
-                from .depiston import depiston
+            
+            if detilt: 
                 from .detilt import detilt
-                phase[:,:,i,t] = depiston(detilt(wf,aperture),aperture)*aperture
-            else:
-                phase[:,:,i,t] = wf
+                wf = detilt(wf,aperture)
+                
+            if depiston:
+                from .depiston import depiston                
+                wf = depiston(wf,aperture)*aperture
+                
+            phase[:,:,i,t] = wf
         
         if savelayers:
-            print('Writing layer {} file'.format(str(i)))  
+            print('Writing layer {} file to {}.fits'.format(str(i), layeroutfile+str(i)))  
             phase[:,:,i,:].shape 
             hdu = fits.PrimaryHDU(phase[:,:,i,:].transpose())
-            hdu.writeto(layerfileroot+str(i)+'.fits', overwrite=True)
+            hdu.writeto(layeroutfile+str(i)+'.fits', overwrite=True)
 
         print('Done with Layer {}'.format(str(i)))
 
@@ -208,14 +214,57 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
     phaseout = np.sum(phase, axis=2)  # sum along layer axis, in radians of phase
     
     if phmicrons:
-        phaseout /= 4*np.pi   # convert to microns at 500 nm
+        phaseout /= 4.0*np.pi   # convert to microns at 500 nm
     
     if dopsd:
+        # Works for m=1 so far, add code to extract apertured part of screen
+        freq_dom_scaling = np.sqrt(np.float(bign)**2/aperture.sum())
+        scale_for_nm = 1.0e3
+        if phmicrons:
+            phaseout *= scale_for_nm  # convert phase to nm
+        else:
+            phaseout *= scale_for_nm/(4.0*np.pi)
+            
+        if not depiston:
+            from .depiston import depiston                
+            phaseout = depiston(phaseout,aperture)*aperture
+            
+        phFT  = np.zeros((bign,bign,timesteps),dtype=complex)
+        print('Generating Fourier modes')                        
+        for t in np.arange(timesteps, dtype=int): 
+            phFT[:,:,t] = sf.fft2(phaseout[:,:,t]) * freq_dom_scaling / bign**2
+            
+        psd  = np.zeros((bign, bign, per_len),dtype=float)    
+        print('Generating PSD')
+        for k in np.arange(bign, dtype=int):
+            for l in np.arange(bign, dtype=int): 
+                psd[k,l,:] = gen_avg_per_unb(phFT[k,l,:], per_len, meanrem=True, hanning=True, halfover=True)
+                
+        kx, ky = generate_grids(bign, scalefac=2*np.pi/(bign*pscale), freqshift=True)  
+        kr = np.sqrt(kx**2 + ky**2)
+        f = np.arange(per_len)
+        omega = 2*np.pi*f/rate
+        hz = np.roll(f-per_len/2, np.int(per_len/2))/per_len*rate
+        varpsd = np.sum(psd, axis=2)
+        
+        eff_r0 = (r0s**(-5./3.)).sum()**(-3./5.)
+        mp.clf()
+        mp.yscale('log')
+        mp.xscale('log')
+        mp.plot(kr, varpsd, 'b.')
+        mp.plot(kr, 0.490*(eff_r0)**(-5./3.)*kr**(-11./3.)*scale_for_nm, 'r-')
+        mp.ylim(1e-8,1e2)
+        mp.xlim(1,200)
+        mp.grid(True)
+        mp.show()
         
     
-    if savefile: 
-        hdu = fits.PrimaryHDU(phaseout.transpose())
-        hdu.writeto(arfileroot+'.fits', overwrite=True)
+    if savefile:
+        print('Writing output to {}.fits'.format(arfileroot))
+        hdu = fits.PrimaryHDU(phaseout.transpose())  # for the benefit of IDL programs?
+        hdu.writeto(aroutfile+'.fits', overwrite=True)
+    elif dopsd:
+        return phaseout, psd
     else:
         return phaseout
 

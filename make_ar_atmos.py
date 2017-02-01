@@ -243,8 +243,8 @@ def make_ar_atmos(exptime, rate, n, m, alpha_params=None, telescope='GPI', nofro
         kx, ky = generate_grids(bign, scalefac=2*np.pi/(bign*pscale), freqshift=True)  
         kr = np.sqrt(kx**2 + ky**2)
         f = np.arange(per_len)
-        omega = 2*np.pi*f/rate
-        hz = np.roll(f-per_len/2, np.int(per_len/2))/per_len*rate
+        omega = np.roll((np.arange(per_len, dtype=int) - per_len/2)*2*np.pi/per_len, per_len/2)
+        hz = omega * rate / (2.0 * np.pi)
         varpsd = np.sum(psd, axis=2)
         
         eff_r0 = (r0s**(-5./3.)).sum()**(-3./5.)
